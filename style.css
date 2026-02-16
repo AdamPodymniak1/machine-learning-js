@@ -1,0 +1,62 @@
+body {
+    background-color: #121212;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 20px;
+}
+
+.dashboard {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.global-controls {
+    display: flex;
+    gap: 20px;
+    background: #1e1e1e;
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 30px;
+    align-items: center;
+    position: sticky;
+    top: 20px;
+    z-index: 10;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.control-item {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+}
+
+button {
+    padding: 12px 24px;
+    background: #4a90e2;
+    border: none;
+    color: white;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.model-card {
+    background: #1e1e1e;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 25px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.model-title { margin: 0; color: #4a90e2; }
+.model-formula { margin: 5px 0; font-family: monospace; color: #888; }
+
+canvas {
+    background: #000;
+    border-radius: 8px;
+    width: 100%;
+    height: auto;
+}
