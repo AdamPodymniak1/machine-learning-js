@@ -24,16 +24,23 @@ class BaseRegressor {
     }
 
     fit(points) {
-        if (this.type === 'Step') {
-            this.fitStep(points);
-            return;
-        }
+        if (this.type === 'Step') { this.fitStep(points); return; }
+        
+        this.params = { a: 0.2, b: 1, c: 0, d: 0.5 };
+        
+        let currentLR = this.lr;
+        let currentIters = this.iters;
 
-        this.params = { a: 0.2, b: 1, c: 0.5, d: 0.5 };
-        if (this.type === 'Periodic') this.params.b = 15;
+        if (this.type === 'Periodic') {
+            this.params.b = 10; 
+            this.params.a = 0.3;
+            currentLR = 0.05; 
+            currentIters = 8000; 
+        }
+        
         if (this.type === 'Logistic') { this.params.a = 0.5; this.params.b = 5; }
 
-        for (let i = 0; i < this.iters; i++) {
+        for (let i = 0; i < currentIters; i++) {
             let da = 0, db = 0, dc = 0, dd = 0;
             for (let p of points) {
                 const x = p.x / 600;
@@ -49,9 +56,11 @@ class BaseRegressor {
                     dc += err;
                 } else if (this.type === 'Logarithmic') { da += err; db += err * Math.log(x + 0.05); }
                 else if (this.type === 'Periodic') {
-                    da += err * Math.sin(this.params.b * x + this.params.c);
-                    db += err * this.params.a * x * Math.cos(this.params.b * x + this.params.c);
-                    dc += err * this.params.a * Math.cos(this.params.b * x + this.params.c);
+                    const sinVal = Math.sin(this.params.b * x + this.params.c);
+                    const cosVal = Math.cos(this.params.b * x + this.params.c);
+                    da += err * sinVal;
+                    db += err * this.params.a * x * cosVal;
+                    dc += err * this.params.a * cosVal;
                     dd += err;
                 } else if (this.type === 'Logistic') {
                     const s = pred * (1 - pred);
@@ -60,16 +69,16 @@ class BaseRegressor {
                 }
             }
             const n = points.length;
-            this.params.a -= (da / n) * this.lr;
-            this.params.b -= (db / n) * this.lr;
-            this.params.c -= (dc / n) * this.lr;
-            this.params.d -= (dd / n) * this.lr;
+            this.params.a -= (da / n) * currentLR;
+            this.params.b -= (db / n) * currentLR;
+            this.params.c -= (dc / n) * currentLR;
+            this.params.d -= (dd / n) * currentLR;
         }
     }
 
     fitStep(points) {
         let bestA = 0.5, bestB = 0, bestC = 0, minErr = Infinity;
-        for (let tA = 0.1; tA < 0.9; tA += 0.05) {
+        for (let tA = 0.1; tA < 0.9; tA += 0.02) {
             const left = points.filter(p => (p.x / 600) < tA);
             const right = points.filter(p => (p.x / 600) >= tA);
             if (!left.length || !right.length) continue;
