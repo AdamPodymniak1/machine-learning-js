@@ -1,62 +1,16 @@
-body {
-    background-color: #121212;
-    color: #e0e0e0;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    margin: 0;
-    padding: 20px;
-}
-
-.dashboard {
-    max-width: 900px;
-    margin: 0 auto;
-}
-
-.global-controls {
-    display: flex;
-    gap: 20px;
-    background: #1e1e1e;
-    padding: 20px;
-    border-radius: 12px;
-    margin-bottom: 30px;
-    align-items: center;
-    position: sticky;
-    top: 20px;
-    z-index: 10;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-}
-
-.control-item {
-    display: flex;
-    flex-direction: column;
-    flex-grow: 1;
-}
-
-button {
-    padding: 12px 24px;
-    background: #4a90e2;
-    border: none;
-    color: white;
-    border-radius: 6px;
-    cursor: pointer;
-    font-weight: bold;
-}
-
-.model-card {
-    background: #1e1e1e;
-    border-radius: 12px;
-    padding: 20px;
-    margin-bottom: 25px;
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
-
-.model-title { margin: 0; color: #4a90e2; }
-.model-formula { margin: 5px 0; font-family: monospace; color: #888; }
-
-canvas {
-    background: #000;
-    border-radius: 8px;
-    width: 100%;
-    height: auto;
-}
+body { background: #0a0a0b; color: #d1d1d1; font-family: 'Inter', sans-serif; margin: 0; padding: 20px; }
+.dashboard { max-width: 850px; margin: 0 auto; }
+header { text-align: center; margin-bottom: 40px; }
+header h1 { color: #58a6ff; margin-bottom: 8px; font-weight: 300; letter-spacing: 1px; }
+header p { color: #6e7681; font-size: 0.9rem; }
+.model-card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 24px; margin-bottom: 30px; }
+.model-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.model-title { margin: 0; font-size: 1.25rem; color: #58a6ff; }
+.model-formula { margin: 4px 0 0 0; font-family: 'Courier New', monospace; color: #8b949e; font-size: 0.85rem; }
+.reroll-btn { padding: 8px 16px; background: #21262d; border: 1px solid #30363d; color: #c9d1d9; border-radius: 6px; cursor: pointer; }
+.reroll-btn:hover { background: #30363d; }
+canvas { background: #010409; border-radius: 6px; width: 100%; display: block; }
+.local-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 20px; }
+.control-item { display: flex; flex-direction: column; gap: 8px; }
+.control-item label { font-size: 11px; color: #8b949e; text-transform: uppercase; font-weight: 600; }
+input[type="range"] { accent-color: #58a6ff; cursor: pointer; }

@@ -3,33 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dynamic ML Models</title>
+    <title>ML Sandbox Ziemniaka</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="dashboard">
-        <div class="global-controls">
-            <div class="control-item">
-                <label>Spread</label>
-                <input type="range" id="globalSpread" min="0" max="100" value="15">
-            </div>
-            <div class="control-item">
-                <label>Outliers (%)</label>
-                <input type="range" id="globalOutliers" min="0" max="20" value="2">
-            </div>
-            <button id="rerollAll">Reroll & Randomize</button>
-        </div>
+        <header>
+            <h1>ML Sandbox</h1>
+        </header>
         <div id="models-container"></div>
     </div>
+
     <template id="model-template">
         <div class="model-card">
-            <div class="model-info">
-                <h2 class="model-title"></h2>
-                <p class="model-formula"></p>
+            <div class="model-header">
+                <div>
+                    <h2 class="model-title"></h2>
+                    <p class="model-formula"></p>
+                </div>
+                <button class="reroll-btn">Reroll Data</button>
             </div>
             <canvas width="600" height="250"></canvas>
+            <div class="local-controls">
+                <div class="control-item">
+                    <label>Spread</label>
+                    <input type="range" class="spread-input" min="0" max="100" value="10">
+                </div>
+                <div class="control-item">
+                    <label>Outliers (%)</label>
+                    <input type="range" class="outlier-input" min="0" max="25" value="1">
+                </div>
+            </div>
         </div>
     </template>
+
     <script src="main.js"></script>
 </body>
 </html>
