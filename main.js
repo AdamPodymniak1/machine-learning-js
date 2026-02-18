@@ -1,15 +1,52 @@
-class BaseRegressor {
+class BaseModel {
+    constructor() {
+        this.params = {};
+        this.isClassifier = false;
+    }
+    predict(x) { return 0; }
+    fit(points) {}
+    getMetrics(points) {
+        if (this.isClassifier) return this.getClassificationMetrics(points);
+        let sse = 0, sae = 0, sst = 0;
+        const n = points.length;
+        const yVals = points.map(p => (250 - p.y) / 250);
+        const yMean = yVals.reduce((a, b) => a + b, 0) / n;
+        for (let p of points) {
+            const xN = p.x / 600;
+            const yN = (250 - p.y) / 250;
+            const pred = this.predict(xN);
+            sse += Math.pow(pred - yN, 2);
+            sae += Math.abs(pred - yN);
+            sst += Math.pow(yN - yMean, 2);
+        }
+        return {
+            m1: `MSE: ${(sse / n).toFixed(5)}`,
+            m2: `MAE: ${(sae / n).toFixed(5)}`,
+            m3: `R²: ${(sst === 0 ? 0 : 1 - (sse / sst)).toFixed(3)}`
+        };
+    }
+    getClassificationMetrics(points) {
+        let correct = 0;
+        points.forEach(p => {
+            const pred = this.predict(p.x / 600) > 0.5 ? 1 : 0;
+            if (pred === p.label) correct++;
+        });
+        return {
+            m1: `ACC: ${((correct / points.length) * 100).toFixed(1)}%`,
+            m2: `ERR: ${(points.length - correct)}`,
+            m3: `N: ${points.length}`
+        };
+    }
+}
+
+class GradientModel extends BaseModel {
     constructor(type) {
+        super();
         this.type = type;
-        this.params = { a: 0.5, b: 0.5, c: 0.5, d: 0.5 };
+        this.params = { a: 0.5, b: 5, c: 0, d: 0.5 };
         this.lr = 0.15;
-        this.iters = 3500;
+        this.iters = 4000;
     }
-
-    sigmoid(z) {
-        return 1 / (1 + Math.exp(-z));
-    }
-
     predict(x) {
         const { a, b, c, d } = this.params;
         switch (this.type) {
@@ -18,199 +55,156 @@ class BaseRegressor {
             case 'Exponential': return a * Math.exp(b * x) + c;
             case 'Logarithmic': return a + b * Math.log(x + 0.05);
             case 'Periodic': return a * Math.sin(b * x + c) + d;
-            case 'Step': return x < a ? b : c;
-            case 'Logistic': return this.sigmoid((x - a) * b * 10);
+            case 'Logistic': return 1 / (1 + Math.exp(-(x - a) * b));
         }
     }
-
     fit(points) {
-        if (this.type === 'Step') { this.fitStep(points); return; }
-        
-        this.params = { a: 0.2, b: 1, c: 0, d: 0.5 };
-        
-        let currentLR = this.lr;
-        let currentIters = this.iters;
-
-        if (this.type === 'Periodic') {
-            this.params.b = 10; 
-            this.params.a = 0.3;
-            currentLR = 0.05; 
-            currentIters = 8000; 
-        }
-        
-        if (this.type === 'Logistic') { this.params.a = 0.5; this.params.b = 5; }
-
-        for (let i = 0; i < currentIters; i++) {
-            let da = 0, db = 0, dc = 0, dd = 0;
+        let lr = this.lr, it = this.iters;
+        if (this.type === 'Periodic') { lr = 0.05; it = 8000; }
+        if (this.type === 'Logistic') { lr = 0.5; it = 5000; }
+        for (let i = 0; i < it; i++) {
+            let grads = { a: 0, b: 0, c: 0, d: 0 };
             for (let p of points) {
-                const x = p.x / 600;
-                const y = (250 - p.y) / 250;
-                const pred = this.predict(x);
-                const err = pred - y;
-
-                if (this.type === 'Linear') { da += err * x; db += err; }
-                else if (this.type === 'Polynomial') { da += err * Math.pow(x - 0.5, 2); db += err * x; dc += err; }
-                else if (this.type === 'Exponential') {
-                    da += err * Math.exp(this.params.b * x);
-                    db += err * this.params.a * x * Math.exp(this.params.b * x);
-                    dc += err;
-                } else if (this.type === 'Logarithmic') { da += err; db += err * Math.log(x + 0.05); }
+                const x = p.x / 600, y = (250 - p.y) / 250;
+                const pred = this.predict(x), err = pred - y;
+                if (this.type === 'Linear') { grads.a += err * x; grads.b += err; }
+                else if (this.type === 'Polynomial') { grads.a += err * Math.pow(x - 0.5, 2); grads.b += err * x; grads.c += err; }
+                else if (this.type === 'Exponential') { grads.a += err * Math.exp(this.params.b * x); grads.b += err * this.params.a * x * Math.exp(this.params.b * x); grads.c += err; }
+                else if (this.type === 'Logarithmic') { grads.a += err; grads.b += err * Math.log(x + 0.05); }
                 else if (this.type === 'Periodic') {
-                    const sinVal = Math.sin(this.params.b * x + this.params.c);
-                    const cosVal = Math.cos(this.params.b * x + this.params.c);
-                    da += err * sinVal;
-                    db += err * this.params.a * x * cosVal;
-                    dc += err * this.params.a * cosVal;
-                    dd += err;
-                } else if (this.type === 'Logistic') {
+                    const cv = Math.cos(this.params.b * x + this.params.c);
+                    grads.a += err * Math.sin(this.params.b * x + this.params.c);
+                    grads.b += err * this.params.a * x * cv;
+                    grads.c += err * this.params.a * cv;
+                    grads.d += err;
+                }
+                else if (this.type === 'Logistic') {
                     const s = pred * (1 - pred);
-                    da += err * s * (-this.params.b * 10);
-                    db += err * s * (x - this.params.a) * 10;
+                    grads.a += err * s * (-this.params.b);
+                    grads.b += err * s * (x - this.params.a);
                 }
             }
-            const n = points.length;
-            this.params.a -= (da / n) * currentLR;
-            this.params.b -= (db / n) * currentLR;
-            this.params.c -= (dc / n) * currentLR;
-            this.params.d -= (dd / n) * currentLR;
+            for (let k in grads) this.params[k] -= (grads[k] / points.length) * lr;
         }
     }
+}
 
-    fitStep(points) {
-        let bestA = 0.5, bestB = 0, bestC = 0, minErr = Infinity;
+class StepModel extends BaseModel {
+    predict(x) { return x < this.params.a ? this.params.b : this.params.c; }
+    fit(points) {
+        let best = { a: 0.5, b: 0, c: 0, err: Infinity };
         for (let tA = 0.1; tA < 0.9; tA += 0.02) {
-            const left = points.filter(p => (p.x / 600) < tA);
-            const right = points.filter(p => (p.x / 600) >= tA);
-            if (!left.length || !right.length) continue;
-            const avgB = left.reduce((s, p) => s + (250 - p.y) / 250, 0) / left.length;
-            const avgC = right.reduce((s, p) => s + (250 - p.y) / 250, 0) / right.length;
-            let err = 0;
-            points.forEach(p => {
-                const pred = (p.x / 600) < tA ? avgB : avgC;
-                err += Math.pow(pred - (250 - p.y) / 250, 2);
-            });
-            if (err < minErr) { minErr = err; bestA = tA; bestB = avgB; bestC = avgC; }
+            const l = points.filter(p => (p.x / 600) < tA), r = points.filter(p => (p.x / 600) >= tA);
+            if (!l.length || !r.length) continue;
+            const b = l.reduce((s, p) => s + (250 - p.y) / 250, 0) / l.length;
+            const c = r.reduce((s, p) => s + (250 - p.y) / 250, 0) / r.length;
+            const err = points.reduce((s, p) => s + Math.pow(((p.x / 600) < tA ? b : c) - (250 - p.y) / 250, 2), 0);
+            if (err < best.err) { best = { a: tA, b, c, err }; }
         }
-        this.params = { a: bestA, b: bestB, c: bestC };
+        this.params = best;
     }
+}
 
-    getMetrics(points) {
-        let sse = 0, sae = 0, sst = 0;
-        const n = points.length;
-        const yVals = points.map(p => (250 - p.y) / 250);
-        const yMean = yVals.reduce((a, b) => a + b, 0) / n;
-
-        for (let p of points) {
-            const x = p.x / 600;
-            const y = (250 - p.y) / 250;
-            const pred = this.predict(x);
-            const err = pred - y;
-            sse += err * err;
-            sae += Math.abs(err);
-            sst += Math.pow(y - yMean, 2);
-        }
-        return {
-            mse: (sse / n).toFixed(5),
-            mae: (sae / n).toFixed(5),
-            r2: (sst === 0 ? 0 : 1 - (sse / sst)).toFixed(3)
-        };
+class NaiveBayesModel extends BaseModel {
+    constructor() { super(); this.isClassifier = true; this.stats = {}; }
+    fit(points) {
+        [0, 1].forEach(c => {
+            const vals = points.filter(p => p.label === c).map(p => p.x / 600);
+            if (vals.length === 0) { this.stats[c] = { m: 0.5, s: 0.5, p: 0 }; return; }
+            const m = vals.reduce((a, b) => a + b, 0) / vals.length;
+            const v = vals.reduce((a, b) => a + Math.pow(b - m, 2), 0) / vals.length;
+            this.stats[c] = { m, s: Math.sqrt(v || 0.01), p: vals.length / points.length };
+        });
+    }
+    predict(x) {
+        const probs = [0, 1].map(c => {
+            const { m, s, p } = this.stats[c];
+            if (p === 0) return 0;
+            return p * (1 / (Math.sqrt(2 * Math.PI) * s)) * Math.exp(-Math.pow(x - m, 2) / (2 * s * s));
+        });
+        return probs[1] > probs[0] ? 1 : 0;
     }
 }
 
 class ModelViz {
-    constructor(type, formula, container) {
+    constructor(type, formula, container, modelClass, isClassifier = false) {
         this.type = type;
-        const temp = document.getElementById('model-template');
-        const clone = temp.content.cloneNode(true);
+        this.isClassifier = isClassifier;
+        const clone = document.getElementById('model-template').content.cloneNode(true);
         this.el = clone.querySelector('.model-card');
         this.canvas = clone.querySelector('canvas');
         this.ctx = this.canvas.getContext('2d');
-        this.mseLabel = this.el.querySelector('.mse-value');
-        this.maeLabel = this.el.querySelector('.mae-value');
-        this.r2Label = this.el.querySelector('.r2-value');
-        this.spreadInput = this.el.querySelector('.spread-input');
-        this.outlierInput = this.el.querySelector('.outlier-input');
-        this.rerollBtn = this.el.querySelector('.reroll-btn');
-
+        this.labels = [this.el.querySelector('.mse-value'), this.el.querySelector('.mae-value'), this.el.querySelector('.r2-value')];
+        this.inputs = { spread: this.el.querySelector('.spread-input'), outlier: this.el.querySelector('.outlier-input') };
         this.el.querySelector('.model-title').textContent = type;
         this.el.querySelector('.model-formula').textContent = formula;
         container.appendChild(this.el);
-
-        this.model = new BaseRegressor(type);
+        this.model = modelClass;
         this.points = [];
-        this.initEvents();
+        this.el.querySelector('.reroll-btn').onclick = () => this.generate();
+        Object.values(this.inputs).forEach(i => i.oninput = () => this.generate());
         this.generate();
     }
-
-    initEvents() {
-        this.rerollBtn.onclick = () => this.generate();
-        this.spreadInput.oninput = () => this.generate();
-        this.outlierInput.oninput = () => this.generate();
-    }
-
     generate() {
-        const spread = this.spreadInput.value / 100;
-        const outlierChance = this.outlierInput.value / 100;
+        const spr = this.inputs.spread.value / 100, out = this.inputs.outlier.value / 100;
         this.points = [];
         const mode = ['clusters', 'gap', 'hetero', 'normal'][Math.floor(Math.random() * 4)];
-
         for (let i = 0; i < 70; i++) {
-            let xN = Math.random();
-            if (mode === 'gap' && xN > 0.4 && xN < 0.6) xN += 0.25;
-            if (mode === 'clusters') xN = Math.floor(xN * 5) / 5 + (Math.random() * 0.05);
-
-            let yN;
-            switch (this.type) {
-                case 'Linear': yN = 0.5 * xN + 0.2; break;
-                case 'Polynomial': yN = 2.5 * Math.pow(xN - 0.5, 2) + 0.2; break;
-                case 'Exponential': yN = 0.1 * Math.exp(2 * xN) + 0.1; break;
-                case 'Logarithmic': yN = 0.5 + 0.2 * Math.log(xN + 0.01); break;
-                case 'Periodic': yN = 0.2 * Math.sin(10 * xN) + 0.5; break;
-                case 'Step': yN = xN < 0.5 ? 0.2 : 0.8; break;
-                case 'Logistic': yN = xN < 0.5 ? 0.1 : 0.9; break;
+            let xN = Math.random(), yN, label = null;
+            if (this.isClassifier) {
+                label = Math.random() > 0.5 ? 1 : 0;
+                xN = Math.max(0, Math.min(1, (label === 0 ? 0.3 : 0.7) + (Math.random() - 0.5) * spr * 1.5));
+                if (Math.random() < out) label = 1 - label;
+                yN = (label === 0 ? 0.25 : 0.75) + (Math.random() - 0.5) * 0.2;
+            } else {
+                if (mode === 'gap' && xN > 0.4 && xN < 0.6) xN += 0.25;
+                if (mode === 'clusters') xN = Math.floor(xN * 5) / 5 + (Math.random() * 0.05);
+                switch (this.type) {
+                    case 'Linear': yN = 0.5 * xN + 0.2; break;
+                    case 'Polynomial': yN = 2.5 * Math.pow(xN - 0.5, 2) + 0.2; break;
+                    case 'Exponential': yN = 0.1 * Math.exp(2 * xN) + 0.1; break;
+                    case 'Logarithmic': yN = 0.5 + 0.2 * Math.log(xN + 0.01); break;
+                    case 'Periodic': yN = 0.2 * Math.sin(10 * xN) + 0.5; break;
+                    case 'Step': yN = xN < 0.5 ? 0.2 : 0.8; break;
+                    case 'Logistic': yN = 1 / (1 + Math.exp(-(xN - 0.5) * 10)); break;
+                }
+                if (Math.random() < out) yN = Math.random();
+                else yN += (Math.random() - 0.5) * (mode === 'hetero' ? xN * spr : spr);
             }
-
-            if (Math.random() < outlierChance) yN = Math.random();
-            else yN += (Math.random() - 0.5) * (mode === 'hetero' ? xN * spread : spread);
-
-            yN = Math.max(0, Math.min(1, yN));
-            this.points.push({ x: xN * 600, y: 250 - (yN * 250) });
+            this.points.push({ x: xN * 600, y: 250 - (Math.max(0, Math.min(1, yN)) * 250), label });
         }
         this.model.fit(this.points);
         const m = this.model.getMetrics(this.points);
-        this.mseLabel.textContent = m.mse;
-        this.maeLabel.textContent = m.mae;
-        this.r2Label.textContent = m.r2;
+        [m.m1, m.m2, m.m3].forEach((v, i) => this.labels[i].textContent = v);
         this.draw();
     }
-
     draw() {
         this.ctx.clearRect(0, 0, 600, 250);
-        this.points.forEach(p => {
-            this.ctx.fillStyle = '#58a6ff';
-            this.ctx.beginPath();
-            this.ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
-            this.ctx.fill();
-        });
-        this.ctx.strokeStyle = '#ff7b72';
-        this.ctx.lineWidth = 3;
-        this.ctx.beginPath();
-        for (let x = 0; x <= 600; x += 2) {
-            const yN = this.model.predict(x / 600);
-            this.ctx.lineTo(x, 250 - (yN * 250));
+        if (this.isClassifier) {
+            for (let x = 0; x < 600; x += 4) {
+                this.ctx.fillStyle = this.model.predict(x / 600) === 1 ? 'rgba(88, 166, 255, 0.15)' : 'rgba(255, 123, 114, 0.15)';
+                this.ctx.fillRect(x, 0, 4, 250);
+            }
         }
-        this.ctx.stroke();
+        this.points.forEach(p => {
+            this.ctx.fillStyle = this.isClassifier ? (p.label === 1 ? '#58a6ff' : '#ff7b72') : '#58a6ff';
+            this.ctx.beginPath(); this.ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2); this.ctx.fill();
+        });
+        if (!this.isClassifier) {
+            this.ctx.strokeStyle = '#ff7b72'; this.ctx.lineWidth = 3; this.ctx.beginPath();
+            for (let x = 0; x <= 600; x += 2) this.ctx.lineTo(x, 250 - (this.model.predict(x / 600) * 250));
+            this.ctx.stroke();
+        }
     }
 }
 
 const container = document.getElementById('models-container');
-const types = [
-    ['Linear', 'y = ax + b'],
-    ['Polynomial', 'y = a(x-0.5)^2 + bx + c'],
-    ['Exponential', 'y = ae^(bx) + c'],
-    ['Logarithmic', 'y = a + b * ln(x)'],
-    ['Periodic', 'y = a * sin(bx + c) + d'],
-    ['Step', 'y = (x < a) ? b : c'],
-    ['Logistic', 'y = 1 / (1 + e^-z)']
-];
-types.forEach(t => new ModelViz(t[0], t[1], container));
+const reg = (t, f) => new ModelViz(t, f, container, new GradientModel(t));
+reg('Linear', 'y = ax + b');
+reg('Polynomial', 'y = a(x-0.5)² + bx + c');
+reg('Exponential', 'y = ae^(bx) + c');
+reg('Logarithmic', 'y = a + b * ln(x)');
+reg('Periodic', 'y = a * sin(bx + c) + d');
+reg('Logistic', 'y = 1 / (1 + e^-z)');
+new ModelViz('Step', 'y = (x < a) ? b : c', container, new StepModel());
+new ModelViz('Naive Bayes', 'P(C|x) ∝ P(x|C)P(C)', container, new NaiveBayesModel(), true);
