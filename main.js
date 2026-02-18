@@ -12,8 +12,7 @@ class BaseModel {
         const yVals = points.map(p => (250 - p.y) / 250);
         const yMean = yVals.reduce((a, b) => a + b, 0) / n;
         for (let p of points) {
-            const xN = p.x / 600;
-            const yN = (250 - p.y) / 250;
+            const xN = p.x / 600, yN = (250 - p.y) / 250;
             const pred = this.predict(xN);
             sse += Math.pow(pred - yN, 2);
             sae += Math.abs(pred - yN);
@@ -26,15 +25,21 @@ class BaseModel {
         };
     }
     getClassificationMetrics(points) {
-        let correct = 0;
+        let tp = 0, fp = 0, fn = 0, tn = 0;
         points.forEach(p => {
             const pred = this.predict(p.x / 600) > 0.5 ? 1 : 0;
-            if (pred === p.label) correct++;
+            if (pred === 1 && p.label === 1) tp++;
+            else if (pred === 1 && p.label === 0) fp++;
+            else if (pred === 0 && p.label === 1) fn++;
+            else if (pred === 0 && p.label === 0) tn++;
         });
+        const acc = (tp + tn) / points.length;
+        const prec = tp / (tp + fp) || 0;
+        const rec = tp / (tp + fn) || 0;
         return {
-            m1: `ACC: ${((correct / points.length) * 100).toFixed(1)}%`,
-            m2: `ERR: ${(points.length - correct)}`,
-            m3: `N: ${points.length}`
+            m1: `ACC: ${(acc * 100).toFixed(1)}%`,
+            m2: `PREC: ${prec.toFixed(2)}`,
+            m3: `REC: ${rec.toFixed(2)}`
         };
     }
 }
@@ -62,12 +67,7 @@ class GradientModel extends BaseModel {
         let lr = this.lr, it = this.iters;
         if (this.type === 'Exponential') { this.params = { a: 0.1, b: 0.5, c: 0 }; lr = 0.01; it = 6000; }
         if (this.type === 'Logistic') { lr = 0.5; it = 5000; }
-        
-        if (this.type === 'Periodic') {
-            this.findBestPeriodicStart(points);
-            lr = 0.02; it = 10000;
-        }
-
+        if (this.type === 'Periodic') { this.findBestPeriodicStart(points); lr = 0.02; it = 10000; }
         for (let i = 0; i < it; i++) {
             let grads = { a: 0, b: 0, c: 0, d: 0 };
             for (let p of points) {
@@ -82,9 +82,7 @@ class GradientModel extends BaseModel {
                 else if (this.type === 'Periodic') {
                     const cv = Math.cos(this.params.b * x + this.params.c);
                     grads.a += err * Math.sin(this.params.b * x + this.params.c);
-                    grads.b += err * this.params.a * x * cv;
-                    grads.c += err * this.params.a * cv;
-                    grads.d += err;
+                    grads.b += err * this.params.a * x * cv; grads.c += err * this.params.a * cv; grads.d += err;
                 } else if (this.type === 'Logistic') {
                     const s = pred * (1 - pred);
                     grads.a += err * s * (-this.params.b); grads.b += err * s * (x - this.params.a);
@@ -97,8 +95,7 @@ class GradientModel extends BaseModel {
         }
     }
     findBestPeriodicStart(points) {
-        let bestErr = Infinity;
-        let bestB = 5;
+        let bestErr = Infinity, bestB = 5;
         for (let testB of [5, 10, 15, 20]) {
             this.params = { a: 0.2, b: testB, c: 0, d: 0.5 };
             let err = points.reduce((s, p) => s + Math.pow(this.predict(p.x/600) - (250-p.y)/250, 2), 0);
@@ -118,7 +115,7 @@ class StepModel extends BaseModel {
             const b = l.reduce((s, p) => s + (250 - p.y) / 250, 0) / l.length;
             const c = r.reduce((s, p) => s + (250 - p.y) / 250, 0) / r.length;
             const err = points.reduce((s, p) => s + Math.pow(((p.x / 600) < tA ? b : c) - (250 - p.y) / 250, 2), 0);
-            if (err < best.err) { best = { a: tA, b, c, err }; }
+            if (err < best.err) best = { a: tA, b, c, err };
         }
         this.params = best;
     }
