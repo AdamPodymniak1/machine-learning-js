@@ -21,7 +21,7 @@ class BaseModel {
         return {
             m1: `MSE: ${(sse / n).toFixed(5)}`,
             m2: `MAE: ${(sae / n).toFixed(5)}`,
-            m3: `R²: ${(sst === 0 ? 0 : 1 - (sse / sst)).toFixed(3)}`
+            m3: `R2: ${(sst === 0 ? 0 : 1 - (sse / sst)).toFixed(3)}`
         };
     }
     getClassificationMetrics(points) {
@@ -142,6 +142,26 @@ class NaiveBayesModel extends BaseModel {
     }
 }
 
+class KNNModel extends BaseModel {
+    constructor(k = 5) {
+        super();
+        this.isClassifier = true;
+        this.k = k;
+        this.data = [];
+    }
+    fit(points) { this.data = points; }
+    predict(x) {
+        if (!this.data.length) return 0;
+        const dists = this.data.map(p => ({
+            d: Math.abs(x - (p.x / 600)),
+            label: p.label
+        })).sort((a, b) => a.d - b.d);
+        const neighbors = dists.slice(0, this.k);
+        const votes = neighbors.reduce((acc, n) => { acc[n.label]++; return acc; }, { 0: 0, 1: 0 });
+        return votes[1] > votes[0] ? 1 : 0;
+    }
+}
+
 class ModelViz {
     constructor(type, formula, container, modelClass, isClassifier = false) {
         this.type = type;
@@ -224,3 +244,4 @@ reg('Periodic', 'y = a * sin(bx + c) + d');
 reg('Logistic', 'y = 1 / (1 + e^-z)');
 new ModelViz('Step', 'y = (x < a) ? b : c', container, new StepModel());
 new ModelViz('Naive Bayes', 'P(C|x) == P(x|C)P(C)', container, new NaiveBayesModel(), true);
+new ModelViz('KNN', 'k = 5', container, new KNNModel(5), true);

@@ -117,13 +117,6 @@ input[type="range"] {
     align-items: center;
 }
 
-.score-item label {
-    font-size: 10px;
-    color: #8b949e;
-    margin-bottom: 4px;
-    text-transform: uppercase;
-}
-
 .score-item span {
     font-size: 14px;
     font-weight: bold;
