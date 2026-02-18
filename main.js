@@ -43,8 +43,8 @@ class GradientModel extends BaseModel {
     constructor(type) {
         super();
         this.type = type;
-        this.params = { a: 0.5, b: 5, c: 0, d: 0.5 };
-        this.lr = 0.15;
+        this.params = { a: 0.1, b: 1, c: 0.1, d: 0.5 };
+        this.lr = 0.1;
         this.iters = 4000;
     }
     predict(x) {
@@ -52,7 +52,7 @@ class GradientModel extends BaseModel {
         switch (this.type) {
             case 'Linear': return a * x + b;
             case 'Polynomial': return a * Math.pow(x - 0.5, 2) + b * x + c;
-            case 'Exponential': return a * Math.exp(b * x) + c;
+            case 'Exponential': return a * Math.exp(Math.min(b * x, 10)) + c;
             case 'Logarithmic': return a + b * Math.log(x + 0.05);
             case 'Periodic': return a * Math.sin(b * x + c) + d;
             case 'Logistic': return 1 / (1 + Math.exp(-(x - a) * b));
@@ -60,8 +60,14 @@ class GradientModel extends BaseModel {
     }
     fit(points) {
         let lr = this.lr, it = this.iters;
-        if (this.type === 'Periodic') { lr = 0.05; it = 8000; }
+        if (this.type === 'Exponential') { this.params = { a: 0.1, b: 0.5, c: 0 }; lr = 0.01; it = 6000; }
         if (this.type === 'Logistic') { lr = 0.5; it = 5000; }
+        
+        if (this.type === 'Periodic') {
+            this.findBestPeriodicStart(points);
+            lr = 0.02; it = 10000;
+        }
+
         for (let i = 0; i < it; i++) {
             let grads = { a: 0, b: 0, c: 0, d: 0 };
             for (let p of points) {
@@ -69,23 +75,36 @@ class GradientModel extends BaseModel {
                 const pred = this.predict(x), err = pred - y;
                 if (this.type === 'Linear') { grads.a += err * x; grads.b += err; }
                 else if (this.type === 'Polynomial') { grads.a += err * Math.pow(x - 0.5, 2); grads.b += err * x; grads.c += err; }
-                else if (this.type === 'Exponential') { grads.a += err * Math.exp(this.params.b * x); grads.b += err * this.params.a * x * Math.exp(this.params.b * x); grads.c += err; }
-                else if (this.type === 'Logarithmic') { grads.a += err; grads.b += err * Math.log(x + 0.05); }
+                else if (this.type === 'Exponential') {
+                    const ex = Math.exp(Math.min(this.params.b * x, 10));
+                    grads.a += err * ex; grads.b += err * this.params.a * x * ex; grads.c += err;
+                } else if (this.type === 'Logarithmic') { grads.a += err; grads.b += err * Math.log(x + 0.05); }
                 else if (this.type === 'Periodic') {
                     const cv = Math.cos(this.params.b * x + this.params.c);
                     grads.a += err * Math.sin(this.params.b * x + this.params.c);
                     grads.b += err * this.params.a * x * cv;
                     grads.c += err * this.params.a * cv;
                     grads.d += err;
-                }
-                else if (this.type === 'Logistic') {
+                } else if (this.type === 'Logistic') {
                     const s = pred * (1 - pred);
-                    grads.a += err * s * (-this.params.b);
-                    grads.b += err * s * (x - this.params.a);
+                    grads.a += err * s * (-this.params.b); grads.b += err * s * (x - this.params.a);
                 }
             }
-            for (let k in grads) this.params[k] -= (grads[k] / points.length) * lr;
+            for (let k in grads) {
+                let delta = (grads[k] / points.length) * lr;
+                this.params[k] -= Math.max(-0.5, Math.min(0.5, delta)); 
+            }
         }
+    }
+    findBestPeriodicStart(points) {
+        let bestErr = Infinity;
+        let bestB = 5;
+        for (let testB of [5, 10, 15, 20]) {
+            this.params = { a: 0.2, b: testB, c: 0, d: 0.5 };
+            let err = points.reduce((s, p) => s + Math.pow(this.predict(p.x/600) - (250-p.y)/250, 2), 0);
+            if (err < bestErr) { bestErr = err; bestB = testB; }
+        }
+        this.params = { a: 0.2, b: bestB, c: 0, d: 0.5 };
     }
 }
 
@@ -162,7 +181,7 @@ class ModelViz {
                 switch (this.type) {
                     case 'Linear': yN = 0.5 * xN + 0.2; break;
                     case 'Polynomial': yN = 2.5 * Math.pow(xN - 0.5, 2) + 0.2; break;
-                    case 'Exponential': yN = 0.1 * Math.exp(2 * xN) + 0.1; break;
+                    case 'Exponential': yN = 0.15 * Math.exp(1.8 * xN) + 0.1; break;
                     case 'Logarithmic': yN = 0.5 + 0.2 * Math.log(xN + 0.01); break;
                     case 'Periodic': yN = 0.2 * Math.sin(10 * xN) + 0.5; break;
                     case 'Step': yN = xN < 0.5 ? 0.2 : 0.8; break;
@@ -207,4 +226,4 @@ reg('Logarithmic', 'y = a + b * ln(x)');
 reg('Periodic', 'y = a * sin(bx + c) + d');
 reg('Logistic', 'y = 1 / (1 + e^-z)');
 new ModelViz('Step', 'y = (x < a) ? b : c', container, new StepModel());
-new ModelViz('Naive Bayes', 'P(C|x) ∝ P(x|C)P(C)', container, new NaiveBayesModel(), true);
+new ModelViz('Naive Bayes', 'P(C|x) == P(x|C)P(C)', container, new NaiveBayesModel(), true);
