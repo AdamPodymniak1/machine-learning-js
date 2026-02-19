@@ -355,20 +355,23 @@ class DecisionTree {
 }
 
 class ForestModel extends BaseModel {
-    constructor(count = 8) {
+    constructor(count = 10) {
         super();
         this.isClassifier = true;
-        this.trees = Array.from({ length: count }, () => new DecisionTree(4));
+        this.count = count;
+        this.depth = 4;
+        this.trees = [];
     }
     fit(points) {
+        this.trees = Array.from({ length: this.count }, () => new DecisionTree(this.depth));
         this.trees.forEach(t => {
             const sample = Array.from({ length: points.length }, () => points[Math.floor(Math.random() * points.length)]);
             t.fit(sample);
         });
     }
     predict(x) {
-        const preds = this.trees.map(t => t.predict(x));
-        return preds.reduce((a, b) => a + b, 0) / preds.length;
+        if (!this.trees.length) return 0.5;
+        return this.trees.reduce((a, b) => a + b.predict(x), 0) / this.trees.length;
     }
 }
 
@@ -393,6 +396,24 @@ class ModelViz {
         this.el.querySelector('.reroll-btn').onclick = () => this.generate();
         Object.values(this.inputs).forEach(i => i.oninput = () => this.generate());
         this.generate();
+
+        if (type === 'Decision Forest') {
+            const controls = this.el.querySelector('.local-controls');
+            const depthContainer = document.createElement('div');
+            depthContainer.className = 'control-group';
+            depthContainer.innerHTML = `
+                <label>Tree Depth: <span class="depth-val">4</span></label>
+                <input type="range" class="depth-input" min="1" max="10" value="4">
+            `;
+            controls.appendChild(depthContainer);
+            this.inputs.depth = depthContainer.querySelector('.depth-input');
+            this.depthDisplay = depthContainer.querySelector('.depth-val');
+            this.inputs.depth.oninput = (e) => {
+                this.depthDisplay.textContent = e.target.value;
+                this.model.depth = parseInt(e.target.value);
+                this.generate();
+            };
+        }
     }
     generate() {
         const spr = this.inputs.spread.value / 100,
@@ -499,4 +520,5 @@ new ModelViz('Step', 'y = (x < a) ? b : c', container, new StepModel());
 new ModelViz('Naive Bayes', 'P(C|x) ∝ P(x|C)P(C)', container, new NaiveBayesModel(), true);
 new ModelViz('KNN', 'k = 5, Neighbors', container, new KNNModel(5), true);
 new ModelViz('SVM', 'RBF Kernel, Soft Margin', container, new SVMModel(), true);
-new ModelViz('Decision Forest', 'Ensemble of Trees', container, new ForestModel(20), true);
+const forest = new ForestModel(12);
+new ModelViz('Decision Forest', 'Bagging & Ensemble Splits', container, forest, true);
