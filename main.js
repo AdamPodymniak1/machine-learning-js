@@ -314,6 +314,64 @@ class SVMModel extends BaseModel {
     }
 }
 
+class DecisionTree {
+    constructor(depth = 4) {
+        this.depth = depth;
+        this.root = null;
+    }
+    fit(points) {
+        this.root = this.build(points, 0);
+    }
+    build(points, d) {
+        if (d >= this.depth || points.length < 2 || points.every(p => p.label === points[0].label)) {
+            const sum = points.reduce((s, p) => s + p.label, 0);
+            return { leaf: true, val: sum / points.length || 0 };
+        }
+        let best = { split: 0, err: Infinity };
+        for (let i = 0; i < points.length; i++) {
+            const split = points[i].x / 600;
+            const l = points.filter(p => p.x / 600 < split);
+            const r = points.filter(p => p.x / 600 >= split);
+            if (!l.length || !r.length) continue;
+            const err = this.calcErr(l) + this.calcErr(r);
+            if (err < best.err) best = { split, l, r };
+        }
+        return {
+            leaf: false,
+            split: best.split,
+            left: this.build(best.l, d + 1),
+            right: this.build(best.r, d + 1)
+        };
+    }
+    calcErr(pts) {
+        const m = pts.reduce((a, b) => a + b.label, 0) / pts.length;
+        return pts.reduce((a, b) => a + Math.pow(b.label - m, 2), 0);
+    }
+    predict(x) {
+        let n = this.root;
+        while (n && !n.leaf) n = x < n.split ? n.left : n.right;
+        return n ? n.val : 0.5;
+    }
+}
+
+class ForestModel extends BaseModel {
+    constructor(count = 8) {
+        super();
+        this.isClassifier = true;
+        this.trees = Array.from({ length: count }, () => new DecisionTree(4));
+    }
+    fit(points) {
+        this.trees.forEach(t => {
+            const sample = Array.from({ length: points.length }, () => points[Math.floor(Math.random() * points.length)]);
+            t.fit(sample);
+        });
+    }
+    predict(x) {
+        const preds = this.trees.map(t => t.predict(x));
+        return preds.reduce((a, b) => a + b, 0) / preds.length;
+    }
+}
+
 class ModelViz {
     constructor(type, formula, container, modelClass, isClassifier = false) {
         this.type = type;
@@ -441,3 +499,4 @@ new ModelViz('Step', 'y = (x < a) ? b : c', container, new StepModel());
 new ModelViz('Naive Bayes', 'P(C|x) ∝ P(x|C)P(C)', container, new NaiveBayesModel(), true);
 new ModelViz('KNN', 'k = 5, Neighbors', container, new KNNModel(5), true);
 new ModelViz('SVM', 'RBF Kernel, Soft Margin', container, new SVMModel(), true);
+new ModelViz('Decision Forest', 'Ensemble of Trees', container, new ForestModel(20), true);
