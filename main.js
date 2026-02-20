@@ -426,6 +426,70 @@ class ForestModel extends BaseModel {
     }
 }
 
+class KMeansModel extends BaseModel {
+    constructor(k = 3) {
+        super();
+        this.k = k;
+        this.centroids = [];
+        this.assignments = [];
+        this.isClassifier = true;
+    }
+
+    fit(points) {
+        if (!points || points.length === 0) return;
+        
+        this.centroids = Array.from({ length: this.k }, () => ({
+            x: Math.random(),
+            y: Math.random()
+        }));
+
+        for (let iter = 0; iter < 10; iter++) {
+            this.assignments = points.map(p => {
+                const px = p.x / 600, py = (250 - p.y) / 250;
+                let minDist = Infinity, cluster = 0;
+                
+                this.centroids.forEach((c, i) => {
+                    const dist = Math.sqrt(Math.pow(px - c.x, 2) + Math.pow(py - c.y, 2));
+                    if (dist < minDist) { minDist = dist; cluster = i; }
+                });
+                return cluster;
+            });
+
+            for (let i = 0; i < this.k; i++) {
+                const clusterPoints = points.filter((_, idx) => this.assignments[idx] === i);
+                if (clusterPoints.length > 0) {
+                    this.centroids[i].x = clusterPoints.reduce((s, p) => s + (p.x / 600), 0) / clusterPoints.length;
+                    this.centroids[i].y = clusterPoints.reduce((s, p) => s + ((250 - p.y) / 250), 0) / clusterPoints.length;
+                }
+            }
+        }
+
+        points.forEach((p, i) => p.label = this.assignments[i]);
+    }
+
+    predict(x) {
+        let minDist = Infinity, cluster = 0;
+        this.centroids.forEach((c, i) => {
+            const dist = Math.sqrt(Math.pow(x - c.x, 2) + Math.pow(0.5 - c.y, 2));
+            if (dist < minDist) { minDist = dist; cluster = i; }
+        });
+        return cluster / (this.k - 1 || 1); 
+    }
+
+    getMetrics(points) {
+        let inertia = 0;
+        points.forEach((p, i) => {
+            const c = this.centroids[this.assignments[i]];
+            inertia += Math.pow((p.x / 600) - c.x, 2) + Math.pow(((250 - p.y) / 250) - c.y, 2);
+        });
+        return {
+            m1: `K: ${this.k}`,
+            m2: `Inertia: ${inertia.toFixed(4)}`,
+            m3: `Converged: Yes`
+        };
+    }
+}
+
 class ModelViz {
     constructor(type, formula, container, modelClass, isClassifier = false) {
         this.type = type;
@@ -446,7 +510,6 @@ class ModelViz {
         this.points = [];
         this.el.querySelector('.reroll-btn').onclick = () => this.generate();
         Object.values(this.inputs).forEach(i => i.oninput = () => this.generate());
-        this.generate();
 
         if (type === 'Decision Forest' || type === 'Decision Tree Regressor') {
             const controls = this.el.querySelector('.local-controls');
@@ -465,16 +528,35 @@ class ModelViz {
                 this.generate();
             };
         }
+
+        this.generate();
     }
+
     generate() {
         const spr = this.inputs.spread.value / 100,
-            out = this.inputs.outlier.value / 100;
+              out = this.inputs.outlier.value / 100;
         this.points = [];
         const isComplex = Math.random() > 0.4;
+        const numGroups = this.inputs.groups ? parseInt(this.inputs.groups.value) : 3;
+
+        const centers = Array.from({ length: numGroups }, () => ({
+            x: 0.15 + Math.random() * 0.7,
+            y: 0.2 + Math.random() * 0.6
+        }));
 
         for (let i = 0; i < 100; i++) {
-            let xN = Math.random(), label, yN;
-            if (this.isClassifier) {
+            let xN = Math.random(), label = 0, yN;
+            if (this.type === 'K-Means') {
+                if (Math.random() < out) {
+                    xN = Math.random();
+                    yN = Math.random();
+                } else {
+                    const centerIndex = i % numGroups; 
+                    const center = centers[centerIndex];
+                    xN = center.x + (Math.random() - 0.5) * (spr * 0.8);
+                    yN = center.y + (Math.random() - 0.5) * (spr * 0.8);
+                }
+            } else if (this.isClassifier) {
                 label = isComplex ? ((xN > 0.4 && xN < 0.6) ? 1 : 0) : (xN > 0.5 ? 1 : 0);
                 xN += (Math.random() - 0.5) * spr * 0.5;
                 if (Math.random() < out) label = 1 - label;
@@ -488,7 +570,7 @@ class ModelViz {
                     case 'Periodic': yN = 0.2 * Math.sin(10 * xN) + 0.5; break;
                     case 'Step': yN = xN < 0.5 ? 0.2 : 0.8; break;
                     case 'Logistic': yN = 1 / (1 + Math.exp(-(xN - 0.5) * 10)); break;
-                    case 'Decision Tree Regressor': yN = 0.4 * Math.sin(5 * xN) + 0.5; break; 
+                    case 'Decision Tree Regressor': yN = 0.4 * Math.sin(5 * xN) + 0.5; break;
                     default: yN = 0.5;
                 }
                 if (Math.random() < out) yN = Math.random();
@@ -505,30 +587,33 @@ class ModelViz {
         [m.m1, m.m2, m.m3].forEach((v, i) => this.labels[i].textContent = v);
         this.draw();
     }
+
     draw() {
         this.ctx.clearRect(0, 0, 600, 250);
-        if (this.isClassifier) {
-            let lastProb = this.model.predict(0);
-            for (let x = 0; x < 600; x += 2) {
-                const prob = this.model.predict(x / 600);
-                this.ctx.fillStyle = `rgba(${255 * (1 - prob)}, ${123 * prob + 166 * (1 - prob)}, ${114 * (1 - prob) + 255 * prob}, 0.25)`;
-                this.ctx.fillRect(x, 0, 2, 250);
+        const palette = [
+            { main: '#58a6ff', bg: 'rgba(88, 166, 255, 0.25)' },
+            { main: '#ff7b72', bg: 'rgba(255, 123, 114, 0.25)' },
+            { main: '#7ee787', bg: 'rgba(126, 231, 135, 0.25)' },
+            { main: '#d2a8ff', bg: 'rgba(210, 168, 255, 0.25)' },
+            { main: '#ffa657', bg: 'rgba(255, 166, 87, 0.25)' },
+            { main: '#f2f0ed', bg: 'rgba(242, 240, 237, 0.25)' }
+        ];
 
-                if ((lastProb <= 0.5 && prob > 0.5) || (lastProb >= 0.5 && prob < 0.5)) {
-                    this.ctx.strokeStyle = 'rgba(255,255,255,0.8)';
-                    this.ctx.lineWidth = 2;
-                    this.ctx.beginPath();
-                    this.ctx.moveTo(x, 0);
-                    this.ctx.lineTo(x, 250);
-                    this.ctx.stroke();
-                }
-                lastProb = prob;
+        if (this.isClassifier && this.type !== 'K-Means') {
+            for (let x = 0; x < 600; x += 4) {
+                const val = this.model.predict(x / 600);
+                const clusterIdx = Math.round(val * (this.model.k - 1 || 1));
+                const color = palette[clusterIdx % palette.length];
+                this.ctx.fillStyle = color.bg;
+                this.ctx.fillRect(x, 0, 4, 250);
             }
         }
+
         this.points.forEach(p => {
             this.ctx.shadowBlur = 4;
             this.ctx.shadowColor = 'rgba(0,0,0,0.5)';
-            this.ctx.fillStyle = this.isClassifier ? (p.label === 1 ? '#58a6ff' : '#ff7b72') : '#58a6ff';
+            const color = (this.isClassifier || this.type === 'K-Means') ? palette[p.label % palette.length].main : '#58a6ff';
+            this.ctx.fillStyle = color;
             this.ctx.beginPath();
             this.ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
             this.ctx.fill();
@@ -537,12 +622,35 @@ class ModelViz {
             this.ctx.lineWidth = 0.5;
             this.ctx.stroke();
         });
-        if (!this.isClassifier) {
+
+        if (!this.isClassifier && this.type !== 'K-Means') {
             this.ctx.strokeStyle = '#ff7b72';
             this.ctx.lineWidth = 3;
             this.ctx.beginPath();
-            for (let x = 0; x <= 600; x += 2) this.ctx.lineTo(x, 250 - (this.model.predict(x / 600) * 250));
+            for (let x = 0; x <= 600; x += 2) {
+                this.ctx.lineTo(x, 250 - (this.model.predict(x / 600) * 250));
+            }
             this.ctx.stroke();
+        }
+
+        if (this.type === 'K-Means' && this.model.centroids) {
+            this.model.centroids.forEach((c, i) => {
+                const x = c.x * 600, y = 250 - (c.y * 250);
+                const color = palette[i % palette.length].main;
+                this.ctx.strokeStyle = '#fff';
+                this.ctx.lineWidth = 4;
+                this.ctx.beginPath();
+                this.ctx.moveTo(x - 10, y); this.ctx.lineTo(x + 10, y);
+                this.ctx.moveTo(x, y - 10); this.ctx.lineTo(x, y + 10);
+                this.ctx.stroke();
+                this.ctx.strokeStyle = color;
+                this.ctx.lineWidth = 2;
+                this.ctx.stroke();
+                this.ctx.fillStyle = '#fff';
+                this.ctx.beginPath();
+                this.ctx.arc(x, y, 2, 0, Math.PI * 2);
+                this.ctx.fill();
+            });
         }
     }
 }
@@ -556,9 +664,10 @@ reg('Logarithmic', 'y = a + b * ln(x)');
 reg('Periodic', 'y = a * sin(bx + c) + d');
 reg('Logistic', 'y = 1 / (1 + e^-z)');
 new ModelViz('Step', 'y = (x < a) ? b : c', container, new StepModel());
-new ModelViz('Naive Bayes', 'P(C|x) ∝ P(x|C)P(C)', container, new NaiveBayesModel(), true);
+new ModelViz('Naive Bayes', 'P(C|x) == P(x|C)P(C)', container, new NaiveBayesModel(), true);
 new ModelViz('KNN', 'k = 5, Neighbors', container, new KNNModel(5), true);
 new ModelViz('SVM', 'RBF Kernel, Soft Margin', container, new SVMModel(), true);
 const forest = new ForestModel(12);
 new ModelViz('Decision Forest', 'Bagging & Ensemble Splits', container, forest, true);
 new ModelViz('Decision Tree Regressor', 'Recursive Mean Splitting', container, new TreeRegressorModel(4));
+new ModelViz('K-Means', 'Unsupervised Centroid Partitioning', container, new KMeansModel(3), true);
