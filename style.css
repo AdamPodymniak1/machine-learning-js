@@ -3,7 +3,7 @@ body {
     color: #d1d1d1;
     font-family: 'Inter', sans-serif;
     margin: 0;
-    padding: 20px;
+    padding: 15px;
 }
 
 .dashboard {
@@ -13,7 +13,7 @@ body {
 
 header {
     text-align: center;
-    margin-bottom: 40px;
+    margin-bottom: 30px;
 }
 
 header h1 {
@@ -21,31 +21,40 @@ header h1 {
     margin-bottom: 8px;
     font-weight: 300;
     letter-spacing: 1px;
-}
-
-header p {
-    color: #6e7681;
-    font-size: 0.9rem;
+    font-size: 1.8rem;
 }
 
 .model-card {
     background: #161b22;
     border: 1px solid #30363d;
     border-radius: 12px;
-    padding: 24px;
-    margin-bottom: 30px;
+    padding: 16px;
+    margin-bottom: 20px;
 }
 
 .model-header {
     display: flex;
+    flex-direction: row;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
+    gap: 10px;
     margin-bottom: 20px;
+}
+
+@media (max-width: 480px) {
+    .model-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .reroll-btn {
+        width: 100%;
+        margin-top: 10px;
+    }
 }
 
 .model-title {
     margin: 0;
-    font-size: 1.25rem;
+    font-size: 1.15rem;
     color: #58a6ff;
 }
 
@@ -53,34 +62,40 @@ header p {
     margin: 4px 0 0 0;
     font-family: 'Courier New', monospace;
     color: #8b949e;
-    font-size: 0.85rem;
+    font-size: 0.75rem;
+    word-break: break-all;
 }
 
 .reroll-btn {
-    padding: 8px 16px;
+    padding: 10px 16px;
     background: #21262d;
     border: 1px solid #30363d;
     color: #c9d1d9;
     border-radius: 6px;
     cursor: pointer;
-}
-
-.reroll-btn:hover {
-    background: #30363d;
+    font-size: 0.9rem;
+    white-space: nowrap;
 }
 
 canvas {
     background: #010409;
     border-radius: 6px;
     width: 100%;
+    height: auto;
     display: block;
 }
 
 .local-controls {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
+    grid-template-columns: 1fr;
+    gap: 16px;
     margin-top: 20px;
+}
+
+@media (min-width: 600px) {
+    .local-controls {
+        grid-template-columns: 1fr 1fr;
+    }
 }
 
 .control-item {
@@ -90,7 +105,7 @@ canvas {
 }
 
 .control-item label {
-    font-size: 11px;
+    font-size: 10px;
     color: #8b949e;
     text-transform: uppercase;
     font-weight: 600;
@@ -99,6 +114,7 @@ canvas {
 input[type="range"] {
     accent-color: #58a6ff;
     cursor: pointer;
+    height: 30px;
 }
 
 .score-grid {
@@ -107,18 +123,20 @@ input[type="range"] {
     border-top: 1px solid #333;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
+    gap: 8px;
     font-family: monospace;
 }
 
-.score-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
 .score-item span {
-    font-size: 14px;
+    font-size: 11px;
     font-weight: bold;
     color: #58a6ff;
+    text-align: center;
+    display: block;
+}
+
+@media (min-width: 480px) {
+    .score-item span {
+        font-size: 14px;
+    }
 }
