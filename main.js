@@ -560,6 +560,78 @@ class DBSCANModel extends BaseModel {
     }
 }
 
+class HDBSCANModel extends BaseModel {
+    constructor(minClusterSize = 5) {
+        super();
+        this.minClusterSize = minClusterSize;
+        this.assignments = [];
+        this.isClassifier = true;
+    }
+
+    fit(points) {
+        const n = points.length;
+        if (n < this.minClusterSize) return;
+
+        const coreDistances = points.map((p1, i) => {
+            const dists = points.map(p2 => 
+                Math.sqrt(Math.pow((p1.x - p2.x)/600, 2) + Math.pow((p1.y - p2.y)/250, 2))
+            ).sort((a, b) => a - b);
+            return dists[this.minClusterSize - 1];
+        });
+
+        const getMRDist = (i, j) => {
+            const d = Math.sqrt(Math.pow((points[i].x - points[j].x)/600, 2) + Math.pow((points[i].y - points[j].y)/250, 2));
+            return Math.max(coreDistances[i], coreDistances[j], d);
+        };
+
+        this.assignments = new Array(n).fill(-1);
+        let currentCluster = 0;
+        const visited = new Set();
+
+        for (let i = 0; i < n; i++) {
+            if (visited.has(i)) continue;
+
+            let cluster = [];
+            let queue = [i];
+            visited.add(i);
+
+            const threshold = coreDistances[i] * 1.5;
+
+            while (queue.length > 0) {
+                let curr = queue.shift();
+                cluster.push(curr);
+
+                for (let j = 0; j < n; j++) {
+                    if (!visited.has(j) && getMRDist(curr, j) < threshold) {
+                        visited.add(j);
+                        queue.push(j);
+                    }
+                }
+            }
+
+            if (cluster.length >= this.minClusterSize) {
+                cluster.forEach(idx => this.assignments[idx] = currentCluster);
+                currentCluster++;
+            }
+        }
+
+        points.forEach((p, i) => {
+            p.label = this.assignments[i] < 0 ? 5 : this.assignments[i];
+        });
+        this.foundClusters = currentCluster;
+    }
+
+    predict() { return 0; }
+
+    getMetrics() {
+        return {
+            m1: `Clusters: ${this.foundClusters}`,
+            m2: `Min Size: ${this.minClusterSize}`,
+            m3: `Noise: ${this.assignments.filter(a => a < 0).length}`
+        };
+    }
+}
+
 class ModelViz {
     constructor(type, formula, container, modelClass, isClassifier = false) {
         this.type = type;
@@ -629,6 +701,25 @@ class ModelViz {
             };
         }
 
+        if (type === 'HDBSCAN') {
+            const controls = this.el.querySelector('.local-controls');
+            const hdbContainer = document.createElement('div');
+            hdbContainer.className = 'control-group';
+            hdbContainer.innerHTML = `
+                <label>Min Cluster Size: <span class="mcs-val">5</span></label>
+                <input type="range" class="mcs-input" min="2" max="15" value="5">
+            `;
+            controls.appendChild(hdbContainer);
+            
+            this.inputs.minClusterSize = hdbContainer.querySelector('.mcs-input');
+            this.inputs.minClusterSize.oninput = (e) => {
+                hdbContainer.querySelector('.mcs-val').textContent = e.target.value;
+                this.model.minClusterSize = parseInt(e.target.value);
+                this.model.fit(this.points);
+                this.draw();
+            };
+        }
+
         this.generate();
     }
 
@@ -648,7 +739,7 @@ class ModelViz {
 
         for (let i = 0; i < 100; i++) {
             let xN = Math.random(), label = 0, yN;
-            if (this.type === 'DBSCAN') {
+            if (this.type === 'DBSCAN' || this.type === 'HDBSCAN') {
                 if (Math.random() < out) {
                     xN = Math.random(); yN = Math.random();
                 } else if (currentShape === 'circles') {
@@ -725,7 +816,7 @@ class ModelViz {
             { main: '#f2f0ed', bg: 'rgba(242, 240, 237, 0.25)' }
         ];
 
-        if (this.isClassifier && this.type !== 'K-Means' && this.type !== 'DBSCAN') {
+        if (this.isClassifier && this.type !== 'K-Means' && this.type !== 'DBSCAN' && this.type !== 'HDBSCAN') {
             for (let x = 0; x < 600; x += 4) {
                 const val = this.model.predict(x / 600);
                 const clusterIdx = Math.round(val * (this.model.k - 1 || 1));
@@ -798,3 +889,4 @@ new ModelViz('Decision Forest', 'Bagging & Ensemble Splits', container, forest, 
 new ModelViz('Decision Tree Regressor', 'Recursive Mean Splitting', container, new TreeRegressorModel(4));
 new ModelViz('K-Means', 'Unsupervised Centroid Partitioning', container, new KMeansModel(3), true);
 new ModelViz('DBSCAN', 'Density-Based Spatial Clustering', container, new DBSCANModel(0.05, 4), true);
+new ModelViz('HDBSCAN', 'Hierarchical Density-Based Spatial Clustering', container, new HDBSCANModel(0.05, 4), true);
