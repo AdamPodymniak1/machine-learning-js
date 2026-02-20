@@ -354,6 +354,57 @@ class DecisionTree {
     }
 }
 
+class TreeRegressorModel extends BaseModel {
+    constructor(depth = 4) {
+        super();
+        this.depth = depth;
+        this.root = null;
+    }
+    fit(points) {
+        if (!points || points.length === 0) return;
+        const data = points.map(p => ({ x: p.x / 600, y: (250 - p.y) / 250 }));
+        this.root = this.build(data, 0);
+    }
+    build(pts, d) {
+        const meanY = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+        if (d >= this.depth || pts.length <= 2) {
+            return { leaf: true, val: meanY || 0 };
+        }
+        let best = { split: null, err: Infinity, l: [], r: [] };
+        const sorted = [...pts].sort((a, b) => a.x - b.x);
+        
+        for (let i = 0; i < sorted.length - 1; i++) {
+            const split = (sorted[i].x + sorted[i+1].x) / 2;
+            const l = sorted.slice(0, i + 1);
+            const r = sorted.slice(i + 1);
+            const err = this.calcVar(l) + this.calcVar(r);
+            if (err < best.err) best = { split, err, l, r };
+        }
+        
+        if (best.split === null) return { leaf: true, val: meanY };
+
+        return {
+            leaf: false,
+            split: best.split,
+            left: this.build(best.l, d + 1),
+            right: this.build(best.r, d + 1)
+        };
+    }
+    calcVar(pts) {
+        if (pts.length === 0) return 0;
+        const m = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+        return pts.reduce((s, p) => s + Math.pow(p.y - m, 2), 0);
+    }
+    predict(x) {
+        if (!this.root) return 0.5;
+        let n = this.root;
+        while (!n.leaf) {
+            n = x < n.split ? n.left : n.right;
+        }
+        return n.val;
+    }
+}
+
 class ForestModel extends BaseModel {
     constructor(count = 10) {
         super();
@@ -397,7 +448,7 @@ class ModelViz {
         Object.values(this.inputs).forEach(i => i.oninput = () => this.generate());
         this.generate();
 
-        if (type === 'Decision Forest') {
+        if (type === 'Decision Forest' || type === 'Decision Tree Regressor') {
             const controls = this.el.querySelector('.local-controls');
             const depthContainer = document.createElement('div');
             depthContainer.className = 'control-group';
@@ -420,9 +471,9 @@ class ModelViz {
             out = this.inputs.outlier.value / 100;
         this.points = [];
         const isComplex = Math.random() > 0.4;
+
         for (let i = 0; i < 100; i++) {
-            let xN = Math.random(),
-                label, yN;
+            let xN = Math.random(), label, yN;
             if (this.isClassifier) {
                 label = isComplex ? ((xN > 0.4 && xN < 0.6) ? 1 : 0) : (xN > 0.5 ? 1 : 0);
                 xN += (Math.random() - 0.5) * spr * 0.5;
@@ -430,27 +481,15 @@ class ModelViz {
                 yN = 0.3 + Math.random() * 0.4;
             } else {
                 switch (this.type) {
-                    case 'Linear':
-                        yN = 0.5 * xN + 0.2;
-                        break;
-                    case 'Polynomial':
-                        yN = 2.5 * Math.pow(xN - 0.5, 2) + 0.2;
-                        break;
-                    case 'Exponential':
-                        yN = 0.15 * Math.exp(1.8 * xN) + 0.1;
-                        break;
-                    case 'Logarithmic':
-                        yN = 0.5 + 0.2 * Math.log(xN + 0.01);
-                        break;
-                    case 'Periodic':
-                        yN = 0.2 * Math.sin(10 * xN) + 0.5;
-                        break;
-                    case 'Step':
-                        yN = xN < 0.5 ? 0.2 : 0.8;
-                        break;
-                    case 'Logistic':
-                        yN = 1 / (1 + Math.exp(-(xN - 0.5) * 10));
-                        break;
+                    case 'Linear': yN = 0.5 * xN + 0.2; break;
+                    case 'Polynomial': yN = 2.5 * Math.pow(xN - 0.5, 2) + 0.2; break;
+                    case 'Exponential': yN = 0.15 * Math.exp(1.8 * xN) + 0.1; break;
+                    case 'Logarithmic': yN = 0.5 + 0.2 * Math.log(xN + 0.01); break;
+                    case 'Periodic': yN = 0.2 * Math.sin(10 * xN) + 0.5; break;
+                    case 'Step': yN = xN < 0.5 ? 0.2 : 0.8; break;
+                    case 'Logistic': yN = 1 / (1 + Math.exp(-(xN - 0.5) * 10)); break;
+                    case 'Decision Tree Regressor': yN = 0.4 * Math.sin(5 * xN) + 0.5; break; 
+                    default: yN = 0.5;
                 }
                 if (Math.random() < out) yN = Math.random();
                 else yN += (Math.random() - 0.5) * spr;
@@ -522,3 +561,4 @@ new ModelViz('KNN', 'k = 5, Neighbors', container, new KNNModel(5), true);
 new ModelViz('SVM', 'RBF Kernel, Soft Margin', container, new SVMModel(), true);
 const forest = new ForestModel(12);
 new ModelViz('Decision Forest', 'Bagging & Ensemble Splits', container, forest, true);
+new ModelViz('Decision Tree Regressor', 'Recursive Mean Splitting', container, new TreeRegressorModel(4));
