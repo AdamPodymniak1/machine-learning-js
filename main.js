@@ -490,6 +490,76 @@ class KMeansModel extends BaseModel {
     }
 }
 
+class DBSCANModel extends BaseModel {
+    constructor(radius = 0.05, minPoints = 4) {
+        super();
+        this.radius = radius;
+        this.minPoints = minPoints;
+        this.assignments = [];
+        this.isClassifier = true; 
+    }
+
+    fit(points) {
+        const n = points.length;
+        this.assignments = new Array(n).fill(-1);
+        let clusterId = 0;
+
+        const getNeighbors = (index) => {
+            const neighbors = [];
+            const p1 = points[index];
+            for (let i = 0; i < n; i++) {
+                const p2 = points[i];
+                const dist = Math.sqrt(Math.pow((p1.x - p2.x)/600, 2) + Math.pow((p1.y - p2.y)/250, 2));
+                if (dist < this.radius) neighbors.push(i);
+            }
+            return neighbors;
+        };
+
+        for (let i = 0; i < n; i++) {
+            if (this.assignments[i] !== -1) continue;
+
+            let neighbors = getNeighbors(i);
+            if (neighbors.length < this.minPoints) {
+                this.assignments[i] = -2;
+                continue;
+            }
+
+            this.assignments[i] = clusterId;
+            let seedList = [...neighbors];
+
+            for (let j = 0; j < seedList.length; j++) {
+                const neighborIdx = seedList[j];
+                
+                if (this.assignments[neighborIdx] === -2) this.assignments[neighborIdx] = clusterId;
+                if (this.assignments[neighborIdx] !== -1) continue;
+
+                this.assignments[neighborIdx] = clusterId;
+                const nextNeighbors = getNeighbors(neighborIdx);
+                if (nextNeighbors.length >= this.minPoints) {
+                    seedList.push(...nextNeighbors);
+                }
+            }
+            clusterId++;
+        }
+
+        points.forEach((p, i) => {
+            p.label = this.assignments[i] < 0 ? 5 : this.assignments[i];
+        });
+        this.foundClusters = clusterId;
+    }
+
+    predict(x) { return 0; }
+
+    getMetrics(points) {
+        const noiseCount = this.assignments.filter(a => a < 0).length;
+        return {
+            m1: `Clusters: ${this.foundClusters}`,
+            m2: `Noise Points: ${noiseCount}`,
+            m3: `Radius: ${this.radius.toFixed(3)}`
+        };
+    }
+}
+
 class ModelViz {
     constructor(type, formula, container, modelClass, isClassifier = false) {
         this.type = type;
@@ -529,6 +599,36 @@ class ModelViz {
             };
         }
 
+        if (type === 'DBSCAN') {    
+            const controls = this.el.querySelector('.local-controls');
+            const dbContainer = document.createElement('div');
+            dbContainer.className = 'control-group';
+            dbContainer.innerHTML = `
+                <label>Radius (ε): <span class="r-val">0.05</span></label>
+                <input type="range" class="r-input" min="0.01" max="0.2" step="0.01" value="0.05">
+                <br/>
+                <label>Min Points: <span class="mp-val">4</span></label>
+                <input type="range" class="mp-input" min="2" max="10" value="4">
+            `;
+            controls.appendChild(dbContainer);
+            
+            const rIn = dbContainer.querySelector('.r-input');
+            const mpIn = dbContainer.querySelector('.mp-input');
+            
+            rIn.oninput = (e) => {
+                dbContainer.querySelector('.r-val').textContent = e.target.value;
+                this.model.radius = parseFloat(e.target.value);
+                this.model.fit(this.points);
+                this.draw();
+            };
+            mpIn.oninput = (e) => {
+                dbContainer.querySelector('.mp-val').textContent = e.target.value;
+                this.model.minPoints = parseInt(e.target.value);
+                this.model.fit(this.points);
+                this.draw();
+            };
+        }
+
         this.generate();
     }
 
@@ -538,6 +638,8 @@ class ModelViz {
         this.points = [];
         const isComplex = Math.random() > 0.4;
         const numGroups = this.inputs.groups ? parseInt(this.inputs.groups.value) : 3;
+        const shapes = ['blobs', 'circles', 'moons'];
+        const currentShape = shapes[Math.floor(Math.random() * shapes.length)];
 
         const centers = Array.from({ length: numGroups }, () => ({
             x: 0.15 + Math.random() * 0.7,
@@ -546,7 +648,31 @@ class ModelViz {
 
         for (let i = 0; i < 100; i++) {
             let xN = Math.random(), label = 0, yN;
-            if (this.type === 'K-Means') {
+            if (this.type === 'DBSCAN') {
+                if (Math.random() < out) {
+                    xN = Math.random(); yN = Math.random();
+                } else if (currentShape === 'circles') {
+                    const radius = (i % 2 === 0) ? 0.15 : 0.35;
+                    const angle = Math.random() * Math.PI * 2;
+                    xN = 0.5 + Math.cos(angle) * radius + (Math.random() - 0.5) * spr * 0.2;
+                    yN = 0.5 + Math.sin(angle) * radius + (Math.random() - 0.5) * spr * 0.2;
+                } else if (currentShape === 'moons') {
+                    const moon = i % 2;
+                    const angle = Math.random() * Math.PI;
+                    if (moon === 0) {
+                        xN = 0.4 + Math.cos(angle) * 0.3; yN = 0.5 + Math.sin(angle) * 0.3;
+                    } else {
+                        xN = 0.6 + Math.cos(angle + Math.PI) * 0.3; yN = 0.4 + Math.sin(angle + Math.PI) * 0.3;
+                    }
+                    xN += (Math.random() - 0.5) * spr * 0.2;
+                    yN += (Math.random() - 0.5) * spr * 0.2;
+                } else {
+                    const center = centers[i % numGroups];
+                    xN = center.x + (Math.random() - 0.5) * (spr * 0.8);
+                    yN = center.y + (Math.random() - 0.5) * (spr * 0.8);
+                }
+            }
+            else if (this.type === 'K-Means') {
                 if (Math.random() < out) {
                     xN = Math.random();
                     yN = Math.random();
@@ -599,7 +725,7 @@ class ModelViz {
             { main: '#f2f0ed', bg: 'rgba(242, 240, 237, 0.25)' }
         ];
 
-        if (this.isClassifier && this.type !== 'K-Means') {
+        if (this.isClassifier && this.type !== 'K-Means' && this.type !== 'DBSCAN') {
             for (let x = 0; x < 600; x += 4) {
                 const val = this.model.predict(x / 600);
                 const clusterIdx = Math.round(val * (this.model.k - 1 || 1));
@@ -671,3 +797,4 @@ const forest = new ForestModel(12);
 new ModelViz('Decision Forest', 'Bagging & Ensemble Splits', container, forest, true);
 new ModelViz('Decision Tree Regressor', 'Recursive Mean Splitting', container, new TreeRegressorModel(4));
 new ModelViz('K-Means', 'Unsupervised Centroid Partitioning', container, new KMeansModel(3), true);
+new ModelViz('DBSCAN', 'Density-Based Spatial Clustering', container, new DBSCANModel(0.05, 4), true);
